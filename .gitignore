@@ -1,0 +1,17 @@
+cat > .gitignore <<'EOF'
+# datasets
+dataset/
+encoder/VAE/SpikeSorting-main/data/
+
+# checkpoints / tensors / arrays
+*.pt
+*.pth
+*.ckpt
+*.npz
+*.npy
+
+# python cache
+__pycache__/
+*.pyc
+.DS_Store
+EOF
