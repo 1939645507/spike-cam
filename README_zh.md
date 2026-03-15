@@ -189,6 +189,7 @@ results/experiments/<YYYY-MM-DD>/<experiment_name>/
 
 - 详细中文说明： [docs/PROJECT_GUIDE_zh.md](docs/PROJECT_GUIDE_zh.md)
 - 详细英文说明： [docs/PROJECT_GUIDE.md](docs/PROJECT_GUIDE.md)
+- 可公开查看的实验报告： [docs/experiment_reports/README.md](docs/experiment_reports/README.md)
 - 代码阅读顺序： [CODE_READING_ORDER_zh.md](CODE_READING_ORDER_zh.md)
 
 ## GitHub 上传建议

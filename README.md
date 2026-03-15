@@ -189,6 +189,7 @@ Typical files:
 - Quick Chinese guide: [README_zh.md](README_zh.md)
 - Detailed English guide: [docs/PROJECT_GUIDE.md](docs/PROJECT_GUIDE.md)
 - Detailed Chinese guide: [docs/PROJECT_GUIDE_zh.md](docs/PROJECT_GUIDE_zh.md)
+- Public experiment reports: [docs/experiment_reports/README.md](docs/experiment_reports/README.md)
 - Code reading order: [CODE_READING_ORDER_zh.md](CODE_READING_ORDER_zh.md)
 
 ## Notes for GitHub
