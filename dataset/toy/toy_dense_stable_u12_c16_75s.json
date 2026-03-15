@@ -1,0 +1,32 @@
+{
+  "name": "toy_dense_stable_u12_c16_75s",
+  "duration_sec": 75,
+  "num_units": 12,
+  "num_channels": 16,
+  "sampling_frequency": 30000.0,
+  "firing_rate": 5.0,
+  "average_peak_amplitude": -115.0,
+  "extra_noise_std": 2.0,
+  "drift_strength": 0.0,
+  "drift_phase": 0.0,
+  "description": "Denser but still stable toy dataset: more units and channels, mild extra noise.",
+  "seed": 22,
+  "npz_path": "/Users/ceker/Library/CloudStorage/OneDrive-TheUniversityofHongKong-Connect/文档/hku/elec4848/code/spike_cam/dataset/toy/toy_dense_stable_u12_c16_75s.npz",
+  "num_spikes": 4591,
+  "label_counts": {
+    "0": 409,
+    "1": 386,
+    "2": 361,
+    "3": 369,
+    "4": 388,
+    "5": 383,
+    "6": 400,
+    "7": 361,
+    "8": 382,
+    "9": 376,
+    "10": 390,
+    "11": 386
+  },
+  "mean_count_per_unit": 382.5833333333333,
+  "std_count_per_unit": 13.7505050412299
+}

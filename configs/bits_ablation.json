@@ -1,0 +1,171 @@
+{
+  "_comment": "bit 数消融实验。stream 与 CAM memory 分离：测试流更大，CAM 只记住 top20。",
+  "experiment_name": "bits_ablation",
+  "description": "Bit-budget ablation comparing 8 / 16 / 32 bits for a static CAM and two representative dynamic strategies.",
+  "seed": 42,
+  "dataset": {
+    "_comment": "这里的 subset 是进入编码/测试流的类集合。",
+    "npz_path": "dataset/my_validation_subset_810000samples_27.00s.npz",
+    "preprocess": {
+      "_comment": "bit 消融沿用同一套前处理，避免把 raw preprocessing 也混进比较里。",
+      "bandpass_enable": true,
+      "bandpass_low_hz": 300.0,
+      "bandpass_high_hz": 6000.0,
+      "bandpass_order": 3,
+      "common_reference_enable": true,
+      "common_reference_mode": "median",
+      "whitening_enable": false,
+      "whitening_num_samples": 20000,
+      "whitening_chunk_size": 50000,
+      "whitening_eps": 1e-5
+    },
+    "waveform": {
+      "waveform_length": 79,
+      "center_index": 39,
+      "align_mode": "min",
+      "alignment_reference": "global_activity",
+      "channel_selection": "topk_max_abs",
+      "topk_channels": 8,
+      "selection_radius": 8,
+      "channel_order": "by_strength",
+      "flatten_order": "channel_major",
+      "fixed_channel": 0
+    },
+    "subset": {
+      "_comment": "固定 top50 测试流。",
+      "mode": "topk",
+      "topk": 50
+    },
+    "sampling": {
+      "max_total_spikes": null,
+      "max_spikes_per_unit": 350,
+      "selection_mode": "uniform_time"
+    },
+    "sort_by_time": true
+  },
+  "encoder": {
+    "_comment": "base encoder 配置。各个 variant 只覆盖 code_size 和必要的层数。",
+    "method": "ae",
+    "backend": "auto",
+    "code_size": 16,
+    "cache_dir": "results/cache/encoded_cache",
+    "reuse_cache": true,
+    "force_reencode": false,
+    "fit_scope": "all",
+    "ae_type": "normal",
+    "epochs": 6,
+    "layers": [64, 32],
+    "scale": "robust",
+    "learning_rate": 0.01,
+    "batch_size": 128,
+    "binarize_threshold": 0.0,
+    "verbose": 1
+  },
+  "template_init": {
+    "method": "majority_vote",
+    "stable_mask_threshold": 0.85,
+    "multi_template_per_unit": 2
+  },
+  "matcher": {
+    "method": "hamming_nearest",
+    "threshold": 4.0,
+    "min_margin": 2.0,
+    "min_accept_margin": 1.0
+  },
+  "update": {
+    "method": "none",
+    "max_confidence": 12,
+    "alpha": 0.05,
+    "lr": 0.15,
+    "max_conf": 5.0,
+    "min_weight": 0.25,
+    "flip_threshold": 0.9,
+    "split_threshold": 6.0,
+    "margin_band": 1.0,
+    "cooldown_steps": 50,
+    "min_margin": 2.0,
+    "allow_evict": false
+  },
+  "cam": {
+    "capacity": null,
+    "capacity_factor": 2.0,
+    "extra_rows": 6,
+    "eviction_policy": "least_used",
+    "memory_subset": {
+      "_comment": "CAM 只记住 top20 memory units。",
+      "mode": "topk",
+      "topk": 20,
+      "selection_source": "pre_sampling"
+    }
+  },
+  "evaluation": {
+    "mode": "chronological",
+    "warmup_ratio": 0.25,
+    "random_train_frac": 0.7,
+    "window_size": 500,
+    "store_curves": true
+  },
+  "results": {
+    "results_dir": "results",
+    "save_predictions": true,
+    "save_curves": true,
+    "save_confusion": true,
+    "copy_encoded_dataset": false
+  },
+  "variants": [
+    {
+      "_comment": "8-bit 静态模板。",
+      "name": "bits8_static",
+      "encoder": { "code_size": 8 },
+      "matcher": { "threshold": 2.0 }
+    },
+    {
+      "_comment": "8-bit + CounterUpdate。",
+      "name": "bits8_counter",
+      "encoder": { "code_size": 8 },
+      "matcher": { "threshold": 2.0 },
+      "update": { "method": "counter" }
+    },
+    {
+      "_comment": "8-bit + DualTemplateUpdate。",
+      "name": "bits8_dual",
+      "encoder": { "code_size": 8 },
+      "matcher": { "threshold": 2.0 },
+      "update": { "method": "dual_template", "alpha": 0.08 }
+    },
+    {
+      "_comment": "16-bit 静态模板。",
+      "name": "bits16_static"
+    },
+    {
+      "_comment": "16-bit + CounterUpdate。",
+      "name": "bits16_counter",
+      "update": { "method": "counter" }
+    },
+    {
+      "_comment": "16-bit + DualTemplateUpdate。",
+      "name": "bits16_dual",
+      "update": { "method": "dual_template", "alpha": 0.08 }
+    },
+    {
+      "_comment": "32-bit 静态模板。",
+      "name": "bits32_static",
+      "encoder": { "code_size": 32, "layers": [96, 48] },
+      "matcher": { "threshold": 8.0 }
+    },
+    {
+      "_comment": "32-bit + CounterUpdate。",
+      "name": "bits32_counter",
+      "encoder": { "code_size": 32, "layers": [96, 48] },
+      "matcher": { "threshold": 8.0 },
+      "update": { "method": "counter" }
+    },
+    {
+      "_comment": "32-bit + DualTemplateUpdate。",
+      "name": "bits32_dual",
+      "encoder": { "code_size": 32, "layers": [96, 48] },
+      "matcher": { "threshold": 8.0 },
+      "update": { "method": "dual_template", "alpha": 0.08 }
+    }
+  ]
+}

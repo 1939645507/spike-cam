@@ -1,17 +1,34 @@
-cat > .gitignore <<'EOF'
-# datasets
-dataset/
-encoder/VAE/SpikeSorting-main/data/
-
-# checkpoints / tensors / arrays
-*.pt
-*.pth
-*.ckpt
-*.npz
-*.npy
-
-# python cache
+# Python cache
 __pycache__/
 *.pyc
 .DS_Store
-EOF
+.venv/
+.venv*/
+venv/
+env/
+
+# Large arrays / checkpoints generated during experimentation
+*.pt
+*.pth
+*.ckpt
+
+# Result artifacts
+results/experiments/
+results/cache/
+results/artifacts/
+results/*/runs/*/predictions.npz
+results/*/runs/*/curves.npz
+results/*/runs/*/confusion.npy
+results/*/runs/*/confusion_labels.npy
+results/*/summary_plots.png
+
+# Raw datasets and generated toy datasets
+dataset/*.npz
+dataset/toy/*.npz
+
+# Local plotting cache
+.mplconfig/
+
+# Optional external checkpoints
+external/VAE/SpikeSorting-main/data/
+external/Autoencoders-in-Spike-Sorting/real_data/

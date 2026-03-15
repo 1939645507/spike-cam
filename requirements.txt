@@ -1,0 +1,6 @@
+numpy>=1.24
+matplotlib>=3.7
+
+# Optional dependencies for the external AE backend:
+# scikit-learn>=1.3
+# tensorflow>=2.12

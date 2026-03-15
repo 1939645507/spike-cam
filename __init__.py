@@ -1,15 +1,21 @@
-"""
-Spike CAM: 可插拔的 CAM + Encoder + 模板 + 评估 框架。
+"""Spike CAM experiment platform.
 
-主要对外暴露的 API：
+This package exposes the primary building blocks used by the project:
 
-- `CAM`（见 cam_core.py）
-- 匹配策略：见 match_strategies.py
-- 动态更新策略：见 update_strategies.py
-- 模板生成：见 templates.py
-- 数据/encoder 管线：见 encoder.py
-- 评估与完整 pipeline：见 evaluate.py
+- configuration loading
+- waveform / encoded dataset helpers
+- encoder interfaces
+- CAM core
+- experiment runner
 """
 
-from cam_core import CAM  # noqa: F401
+from config import load_config
+from dataio import EncodedDataset, WaveformDataset
+from experiment_runner import run_experiment_suite
 
+__all__ = [
+    "EncodedDataset",
+    "WaveformDataset",
+    "load_config",
+    "run_experiment_suite",
+]

@@ -1,0 +1,28 @@
+{
+  "name": "toy_easy_stable_u8_c8_60s",
+  "duration_sec": 60,
+  "num_units": 8,
+  "num_channels": 8,
+  "sampling_frequency": 30000.0,
+  "firing_rate": 5.0,
+  "average_peak_amplitude": -120.0,
+  "extra_noise_std": 0.0,
+  "drift_strength": 0.0,
+  "drift_phase": 0.0,
+  "description": "Easy sanity-check toy dataset: 8 units, 8 channels, stable recording, no extra perturbation.",
+  "seed": 11,
+  "npz_path": "/Users/ceker/Library/CloudStorage/OneDrive-TheUniversityofHongKong-Connect/文档/hku/elec4848/code/spike_cam/dataset/toy/toy_easy_stable_u8_c8_60s.npz",
+  "num_spikes": 2412,
+  "label_counts": {
+    "0": 306,
+    "1": 309,
+    "2": 301,
+    "3": 291,
+    "4": 319,
+    "5": 302,
+    "6": 295,
+    "7": 289
+  },
+  "mean_count_per_unit": 301.5,
+  "std_count_per_unit": 9.300537618869138
+}

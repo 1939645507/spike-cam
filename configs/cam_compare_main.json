@@ -1,0 +1,208 @@
+{
+  "_comment": "主实验配置。固定 encoder，只比较不同 CAM dynamic update strategies；stream 与 CAM memory 已解耦。",
+  "experiment_name": "cam_compare_main",
+  "description": "Main experiment: fix the encoder and compare dynamic CAM update strategies under chronological online evaluation.",
+  "seed": 42,
+  "dataset": {
+    "_comment": "这里的 dataset.subset 表示进入编码/测试流的类集合。主实验先用 top50 stream，避免一上来就做 1200 类全量任务。",
+    "npz_path": "dataset/my_validation_subset_810000samples_27.00s.npz",
+    "preprocess": {
+      "_comment": "真实 raw voltage 在 encode 前先做 bandpass + CMR。whitening 先作为可选项关闭。",
+      "bandpass_enable": true,
+      "bandpass_low_hz": 300.0,
+      "bandpass_high_hz": 6000.0,
+      "bandpass_order": 3,
+      "common_reference_enable": true,
+      "common_reference_mode": "median",
+      "whitening_enable": false,
+      "whitening_num_samples": 20000,
+      "whitening_chunk_size": 50000,
+      "whitening_eps": 1e-5
+    },
+    "waveform": {
+      "_comment": "新版默认保留 top-k channels 并 flatten，尽量保住 spatial footprint。",
+      "waveform_length": 79,
+      "center_index": 39,
+      "align_mode": "min",
+      "alignment_reference": "global_activity",
+      "channel_selection": "topk_max_abs",
+      "topk_channels": 8,
+      "selection_radius": 8,
+      "channel_order": "by_strength",
+      "flatten_order": "channel_major",
+      "fixed_channel": 0
+    },
+    "subset": {
+      "_comment": "测试流包含 top50 活跃类。",
+      "mode": "topk",
+      "topk": 50
+    },
+    "sampling": {
+      "_comment": "每个 unit 最多保留 400 个 spikes，仍按时间均匀抽样，避免某些头部类过度主导实验。",
+      "max_total_spikes": null,
+      "max_spikes_per_unit": 400,
+      "selection_mode": "uniform_time"
+    },
+    "sort_by_time": true
+  },
+  "encoder": {
+    "_comment": "主实验里 encoder 固定，避免把 CAM 结果和 encoder 差异混在一起。",
+    "method": "ae",
+    "backend": "auto",
+    "code_size": 16,
+    "cache_dir": "results/cache/encoded_cache",
+    "reuse_cache": true,
+    "force_reencode": false,
+    "fit_scope": "all",
+    "ae_type": "normal",
+    "epochs": 6,
+    "layers": [64, 32],
+    "scale": "robust",
+    "learning_rate": 0.01,
+    "batch_size": 128,
+    "binarize_threshold": 0.0,
+    "verbose": 1
+  },
+  "template_init": {
+    "_comment": "主实验先固定 majority_vote，初始化方法单独在 init_ablation 里做消融。",
+    "method": "majority_vote",
+    "stable_mask_threshold": 0.85,
+    "multi_template_per_unit": 2
+  },
+  "matcher": {
+    "_comment": "默认 matcher 用 hamming_nearest。某些 variant 会单独覆盖成 weighted_hamming。",
+    "method": "hamming_nearest",
+    "threshold": 4.0,
+    "min_margin": 2.0,
+    "min_accept_margin": 1.0
+  },
+  "update": {
+    "_comment": "这里是 base update 配置。各个 variant 会只覆盖自己关心的字段。",
+    "method": "none",
+    "max_confidence": 12,
+    "alpha": 0.05,
+    "lr": 0.15,
+    "max_conf": 5.0,
+    "min_weight": 0.25,
+    "flip_threshold": 0.9,
+    "split_threshold": 6.0,
+    "margin_band": 1.0,
+    "cooldown_steps": 50,
+    "min_margin": 2.0,
+    "allow_evict": false
+  },
+  "cam": {
+    "_comment": "CAM 只记住 top20 类，stream 中其余类用于检验 reject 能力。",
+    "capacity": null,
+    "capacity_factor": 2.0,
+    "extra_rows": 8,
+    "eviction_policy": "least_used",
+    "memory_subset": {
+      "_comment": "只把 top20 活跃类加载进 CAM 模板。",
+      "mode": "topk",
+      "topk": 20,
+      "selection_source": "pre_sampling"
+    }
+  },
+  "evaluation": {
+    "_comment": "chronological 是主评估方式。warmup_ratio=0.25 表示前 25% 时间建立初始模板，后 75% 在线评估。",
+    "mode": "chronological",
+    "warmup_ratio": 0.25,
+    "random_train_frac": 0.7,
+    "window_size": 500,
+    "store_curves": true
+  },
+  "results": {
+    "_comment": "主实验默认保存 predictions / curves / confusion，方便后续做图、写表和错误分析。",
+    "results_dir": "results",
+    "save_predictions": true,
+    "save_curves": true,
+    "save_confusion": true,
+    "copy_encoded_dataset": false
+  },
+  "variants": [
+    {
+      "_comment": "静态模板对照组。",
+      "name": "static",
+      "description": "No dynamic updates."
+    },
+    {
+      "_comment": "计数器更新：更保守，bit 翻转需要累积证据。",
+      "name": "counter",
+      "description": "Signed confidence counters for cautious bit flips.",
+      "update": {
+        "method": "counter"
+      }
+    },
+    {
+      "_comment": "仅在接近 decision boundary 时用 EMA 更新。",
+      "name": "margin_ema",
+      "description": "EMA updates only on near-threshold matches.",
+      "update": {
+        "method": "margin_ema",
+        "alpha": 0.05,
+        "margin_band": 1.0
+      }
+    },
+    {
+      "_comment": "同时启用 weighted_hamming 和 confidence-weighted update。",
+      "name": "confidence_weighted",
+      "description": "Confidence-weighted bit updates with weighted Hamming matching.",
+      "matcher": {
+        "method": "weighted_hamming",
+        "threshold": 4.0
+      },
+      "update": {
+        "method": "confidence_weighted",
+        "lr": 0.15
+      }
+    },
+    {
+      "_comment": "stable template + plastic template 双模板思路。",
+      "name": "dual_template",
+      "description": "Stable/plastic dual-template update.",
+      "update": {
+        "method": "dual_template",
+        "alpha": 0.08
+      }
+    },
+    {
+      "_comment": "每个位维护概率。",
+      "name": "probabilistic",
+      "description": "Per-bit probability tracking.",
+      "update": {
+        "method": "probabilistic",
+        "alpha": 0.05
+      }
+    },
+    {
+      "_comment": "允许同一个 neuron 长出多个模板行。",
+      "name": "growing",
+      "description": "Allow neurons to occupy multiple templates.",
+      "update": {
+        "method": "growing",
+        "split_threshold": 6.0
+      }
+    },
+    {
+      "_comment": "加入 update cooldown，避免短时间反复改模板。",
+      "name": "cooldown",
+      "description": "EMA update with a per-row cooldown period.",
+      "update": {
+        "method": "cooldown",
+        "alpha": 0.05,
+        "cooldown_steps": 50
+      }
+    },
+    {
+      "_comment": "只有 top-2 差距足够大时才更新。",
+      "name": "top2_margin",
+      "description": "EMA update only on top-2 unambiguous matches.",
+      "update": {
+        "method": "top2_margin",
+        "alpha": 0.05,
+        "min_margin": 2.0
+      }
+    }
+  ]
+}

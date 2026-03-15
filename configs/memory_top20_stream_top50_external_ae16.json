@@ -1,0 +1,139 @@
+{
+  "_comment": "示例配置：stream 包含 top50 类，但 CAM 只加载 top20 模板。这正对应“记忆有限，但测试流更大”的协议。",
+  "experiment_name": "memory_top20_stream_top50_external_ae16",
+  "description": "Memory-aware experiment: encode and test on top50 units, but only load top20 templates into CAM and reject the rest.",
+  "seed": 42,
+  "dataset": {
+    "_comment": "dataset.subset = 进入编码/测试流的数据范围。",
+    "npz_path": "dataset/my_validation_subset_810000samples_27.00s.npz",
+    "preprocess": {
+      "_comment": "新版默认 bandpass + CMR，whitening 先关闭。",
+      "bandpass_enable": true,
+      "bandpass_low_hz": 300.0,
+      "bandpass_high_hz": 6000.0,
+      "bandpass_order": 3,
+      "common_reference_enable": true,
+      "common_reference_mode": "median",
+      "whitening_enable": false,
+      "whitening_num_samples": 20000,
+      "whitening_chunk_size": 50000,
+      "whitening_eps": 1e-5
+    },
+    "waveform": {
+      "waveform_length": 79,
+      "center_index": 39,
+      "align_mode": "min",
+      "alignment_reference": "global_activity",
+      "channel_selection": "topk_max_abs",
+      "topk_channels": 8,
+      "selection_radius": 8,
+      "channel_order": "by_strength",
+      "flatten_order": "channel_major",
+      "fixed_channel": 0
+    },
+    "subset": {
+      "_comment": "stream 用 top50。",
+      "mode": "topk",
+      "topk": 50
+    },
+    "sampling": {
+      "_comment": "为了加快实验，每个 unit 最多保留 250 个 spikes。",
+      "max_total_spikes": null,
+      "max_spikes_per_unit": 250,
+      "selection_mode": "uniform_time"
+    },
+    "sort_by_time": true
+  },
+  "encoder": {
+    "_comment": "这里直接用 external AE 16-bit。",
+    "method": "ae",
+    "backend": "external",
+    "code_size": 16,
+    "cache_dir": "results/cache/encoded_cache",
+    "reuse_cache": true,
+    "force_reencode": false,
+    "fit_scope": "all",
+    "ae_type": "normal",
+    "epochs": 3,
+    "layers": [64, 32],
+    "scale": "minmax",
+    "learning_rate": 0.001,
+    "batch_size": 128,
+    "binarize_threshold": 0.0,
+    "verbose": 0
+  },
+  "template_init": {
+    "method": "majority_vote",
+    "stable_mask_threshold": 0.85,
+    "multi_template_per_unit": 2
+  },
+  "matcher": {
+    "method": "hamming_nearest",
+    "threshold": 4.0,
+    "min_margin": 2.0,
+    "min_accept_margin": 1.0
+  },
+  "update": {
+    "method": "none",
+    "max_confidence": 12,
+    "alpha": 0.05,
+    "lr": 0.15,
+    "max_conf": 5.0,
+    "min_weight": 0.25,
+    "flip_threshold": 0.9,
+    "split_threshold": 6.0,
+    "margin_band": 1.0,
+    "cooldown_steps": 50,
+    "min_margin": 2.0,
+    "allow_evict": false
+  },
+  "cam": {
+    "_comment": "cam.memory_subset = 真正允许写进 CAM 模板的类集合。",
+    "capacity": null,
+    "capacity_factor": 1.5,
+    "extra_rows": 6,
+    "eviction_policy": "least_used",
+    "memory_subset": {
+      "_comment": "只记住 top20 类；selection_source=pre_sampling 表示按下采样前的真实类计数来选。",
+      "mode": "topk",
+      "topk": 20,
+      "selection_source": "pre_sampling"
+    }
+  },
+  "evaluation": {
+    "mode": "chronological",
+    "warmup_ratio": 0.25,
+    "random_train_frac": 0.7,
+    "window_size": 250,
+    "store_curves": true
+  },
+  "results": {
+    "results_dir": "results",
+    "save_predictions": true,
+    "save_curves": true,
+    "save_confusion": true,
+    "copy_encoded_dataset": false
+  },
+  "variants": [
+    {
+      "_comment": "静态 baseline：只靠固定 top20 memory templates。",
+      "name": "static"
+    },
+    {
+      "_comment": "保守一点的动态更新。",
+      "name": "counter",
+      "update": {
+        "method": "counter"
+      }
+    },
+    {
+      "_comment": "只在接近阈值时更新。",
+      "name": "margin_ema",
+      "update": {
+        "method": "margin_ema",
+        "alpha": 0.05,
+        "margin_band": 1.0
+      }
+    }
+  ]
+}

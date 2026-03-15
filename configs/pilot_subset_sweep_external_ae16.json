@@ -1,0 +1,129 @@
+{
+  "_comment": "Pilot study 1: 用 external AE + 16 bits 比较不同 subset 规模（top10 / top20 / top50）的静态 CAM 表现。",
+  "experiment_name": "pilot_subset_sweep_external_ae16",
+  "description": "Pilot experiment to compare top-k subset sizes under the same external AE and static CAM setup.",
+  "seed": 42,
+  "dataset": {
+    "_comment": "数据配置。这里的 base subset 会被 variants 覆盖，用来做 top10 / top20 / top50 的对照。",
+    "npz_path": "dataset/my_validation_subset_810000samples_27.00s.npz",
+    "waveform": {
+      "waveform_length": 79,
+      "center_index": 39,
+      "align_mode": "min",
+      "channel_selection": "max_abs",
+      "fixed_channel": 0
+    },
+    "subset": {
+      "mode": "topk",
+      "topk": 20
+    },
+    "sampling": {
+      "_comment": "每个 unit 最多取 250 个 spikes，先做一轮轻量 pilot，控制实验时间。",
+      "max_total_spikes": null,
+      "max_spikes_per_unit": 250,
+      "selection_mode": "uniform_time"
+    },
+    "sort_by_time": true
+  },
+  "encoder": {
+    "_comment": "强制使用 external AE。epochs 先设成 3，作为第一轮 pilot，不追求最终最优。",
+    "method": "ae",
+    "backend": "external",
+    "code_size": 16,
+    "cache_dir": "results/cache/encoded_cache",
+    "reuse_cache": true,
+    "force_reencode": false,
+    "fit_scope": "all",
+    "ae_type": "normal",
+    "epochs": 3,
+    "layers": [64, 32],
+    "scale": "minmax",
+    "learning_rate": 0.001,
+    "batch_size": 128,
+    "binarize_threshold": 0.0,
+    "verbose": 0
+  },
+  "template_init": {
+    "_comment": "subset sweep 先固定最简单的 majority_vote，避免把初始化变量也混进来。",
+    "method": "majority_vote",
+    "stable_mask_threshold": 0.85,
+    "multi_template_per_unit": 2
+  },
+  "matcher": {
+    "_comment": "先固定最基础的 Hamming nearest + reject threshold。",
+    "method": "hamming_nearest",
+    "threshold": 4.0,
+    "min_margin": 2.0,
+    "min_accept_margin": 1.0
+  },
+  "update": {
+    "_comment": "subset sweep 只比较 subset 大小，不做动态更新。",
+    "method": "none",
+    "max_confidence": 12,
+    "alpha": 0.05,
+    "lr": 0.15,
+    "max_conf": 5.0,
+    "min_weight": 0.25,
+    "flip_threshold": 0.9,
+    "split_threshold": 6.0,
+    "margin_band": 1.0,
+    "cooldown_steps": 50,
+    "min_margin": 2.0,
+    "allow_evict": false
+  },
+  "cam": {
+    "_comment": "静态 CAM 不额外扩容，capacity 直接跟随初始模板数。",
+    "capacity": null,
+    "capacity_factor": 1.0,
+    "extra_rows": 0,
+    "eviction_policy": "least_used"
+  },
+  "evaluation": {
+    "_comment": "主评估仍然是 chronological；前 25% 时间做 warmup，后 75% 在线测试。",
+    "mode": "chronological",
+    "warmup_ratio": 0.25,
+    "random_train_frac": 0.7,
+    "window_size": 250,
+    "store_curves": true
+  },
+  "results": {
+    "_comment": "保存预测、曲线、confusion，后面可直接做 pilot 报告和可视化。",
+    "results_dir": "results",
+    "save_predictions": true,
+    "save_curves": true,
+    "save_confusion": true,
+    "copy_encoded_dataset": false
+  },
+  "variants": [
+    {
+      "_comment": "只保留 top10 类。",
+      "name": "top10_static",
+      "dataset": {
+        "subset": {
+          "mode": "topk",
+          "topk": 10
+        }
+      }
+    },
+    {
+      "_comment": "只保留 top20 类。",
+      "name": "top20_static",
+      "dataset": {
+        "subset": {
+          "mode": "topk",
+          "topk": 20
+        }
+      }
+    },
+    {
+      "_comment": "只保留 top50 类。",
+      "name": "top50_static",
+      "dataset": {
+        "subset": {
+          "mode": "topk",
+          "topk": 50
+        }
+      }
+    }
+  ]
+}

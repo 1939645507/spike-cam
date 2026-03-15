@@ -1,325 +1,402 @@
+"""Dynamic update strategies for CAM templates.
+
+Each strategy receives the already-computed match result, which keeps the
+matching and updating concerns cleanly separated.
+
+中文说明
+--------
+这个文件是整个毕设最核心的算法区之一。
+
+这里每个类都代表一种“模板动态更新策略”。
+它们的共同特点是：
+
+- 先使用 matcher 得到匹配结果
+- 再决定是否更新模板
+- 可以维护自己的内部 state
+
+这样就能很方便地比较：
+
+- 不更新 vs 更新
+- 保守更新 vs 激进更新
+- 单模板 vs 可塑模板
+- 固定容量 vs 可增长模板
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional, Tuple
 
 import numpy as np
 
-from cam_core import CAM, UpdateStrategy, MatchStrategy
+from cam_core import CAM, MatchResult, UpdateResult, UpdateStrategy
+
+
+def _count_bit_changes(before: np.ndarray, after: np.ndarray) -> int:
+    """Return how many bit positions changed.
+
+    中文：统计一次更新里到底翻了多少个 bit。
+    """
+
+    return int(np.sum(np.asarray(before, dtype=np.uint8) != np.asarray(after, dtype=np.uint8)))
 
 
 @dataclass
 class NoUpdate(UpdateStrategy):
-    """
-    不进行任何动态更新，只是复用 match_strategy 的结果。
-    主要用于对照实验。
+    """Control strategy that keeps templates fixed.
+
+    中文：静态模板对照组。
     """
 
-    base_match: MatchStrategy
+    def initialize_state(self, cam: CAM) -> None:
+        return None
 
-    def match_and_update(
-        self,
-        cam: CAM,
-        input_bits: np.ndarray,
-        threshold: int = 0,
-    ) -> Tuple[Optional[int], int, int]:
-        return self.base_match.match(cam, input_bits, threshold=threshold)
+    def update(self, cam: CAM, input_bits: np.ndarray, match: MatchResult, step_index: int) -> UpdateResult:
+        return UpdateResult(updated=False, reason="disabled")
 
 
 @dataclass
 class CounterUpdate(UpdateStrategy):
+    """Bit-wise hysteresis update.
+
+    A signed confidence counter is maintained for each bit:
+
+    - repeated evidence for bit ``1`` pushes the counter positive
+    - repeated evidence for bit ``0`` pushes the counter negative
+    - the stored binary template follows the sign of the counter
+
+    This makes template flips deliberate rather than instantaneous.
+
+    中文：
+    这是一个比较“稳”的更新策略。
+    不会因为一次 mismatch 就立刻翻转模板位，而是要累计证据。
     """
-    简化版“置信计数器”动态更新策略（参考你原来的 CounterDynamicCAM 思路）。
 
-    思路：
-    - 每个 bit 维护一个整数计数器 counters[row, bit]
-    - 每次匹配成功：
-        - 对匹配行，若输入 bit 与模板相同，则计数 +1；否则计数 -1（下限为 0）
-        - 当某个 bit 的计数 > max_confidence，则把该 bit 的模板改为当前输入 bit，并计数清零
-    - 可以理解为：一条轨迹上、累计“足够多次一致”，我们才允许模板做一次 bit flip。
-    """
-
-    base_match: MatchStrategy
-    max_confidence: int = 10
-
-    def _ensure_state(self, cam: CAM) -> np.ndarray:
-        if "counters" not in cam.state:
-            cam.state["counters"] = np.zeros((cam.capacity, cam.bit_width), dtype=int)
-        return cam.state["counters"]
+    max_confidence: int = 12
 
     def initialize_state(self, cam: CAM) -> None:
-        """
-        初始化计数器为 max_confidence 的一半（模仿 CounterDynamicCAM 的写法）。
-        """
-        counters = self._ensure_state(cam)
-        initial_val = self.max_confidence // 2
-        counters[:, :] = (cam.templates * 2 - 1) * initial_val
-        counters[:, :] *= cam.masks
+        signed = np.where(cam.templates > 0, self.max_confidence // 2, -(self.max_confidence // 2))
+        cam.state["counter_signed"] = signed.astype(np.int16)
 
-    def match_and_update(
-        self,
-        cam: CAM,
-        input_bits: np.ndarray,
-        threshold: int = 0,
-    ) -> Tuple[Optional[int], int, int]:
-        nid, row_idx, dist = self.base_match.match(cam, input_bits, threshold=threshold)
-        if nid is None or row_idx < 0:
-            return None, row_idx, dist
+    def update(self, cam: CAM, input_bits: np.ndarray, match: MatchResult, step_index: int) -> UpdateResult:
+        if not match.accepted or match.best_row < 0:
+            return UpdateResult(updated=False, reason="not_accepted")
 
-        x = np.asarray(input_bits, dtype=int)
-        counters = self._ensure_state(cam)
+        counters = cam.state["counter_signed"]
+        row = match.best_row
+        before = cam.templates[row].copy()
 
-        tpl = cam.templates[row_idx]
-        c = counters[row_idx]
+        signed_input = np.where(input_bits > 0, 1, -1).astype(np.int16)
+        counters[row] = np.clip(counters[row] + signed_input, -self.max_confidence, self.max_confidence)
+        cam.templates[row] = (counters[row] >= 0).astype(np.uint8)
 
-        same = x == tpl
-        # 一致的 bit 置信度 +1， 不一致的 -1（但不低于 0）
-        c[same] += 1
-        c[~same] -= 1
-        c[c < 0] = 0
-
-        # 达到阈值的 bit，更新模板，并清零计数
-        to_flip = c > self.max_confidence
-        if np.any(to_flip):
-            tpl[to_flip] = x[to_flip]
-            c[to_flip] = 0
-
-        cam.templates[row_idx] = tpl
-        counters[row_idx] = c
-
-        return nid, row_idx, dist
+        changed = _count_bit_changes(before, cam.templates[row])
+        return UpdateResult(
+            updated=changed > 0,
+            updated_row=row,
+            updated_bits=changed,
+            reason="counter",
+        )
 
 
 @dataclass
 class MarginEmaUpdate(UpdateStrategy):
-    """
-    Margin + EMA 动态更新策略（参考 MarginEmaCAM）。
+    """EMA update applied only to matches close to the threshold boundary.
 
-    - 仅当距离接近阈值边界 (threshold - dist <= 1) 时才更新
-    - 使用浮点 EMA 模板，最后阈值 0.5 转回 0/1
+    中文：只对“接近 decision boundary”的样本做 EMA 更新。
     """
 
-    base_match: MatchStrategy
     alpha: float = 0.05
-
-    def _ensure_state(self, cam: CAM) -> np.ndarray:
-        if "ema_templates" not in cam.state:
-            cam.state["ema_templates"] = cam.templates.astype(float)
-        return cam.state["ema_templates"]
+    margin_band: float = 1.0
 
     def initialize_state(self, cam: CAM) -> None:
-        cam.state["ema_templates"] = cam.templates.astype(float)
+        cam.state["ema_templates"] = cam.templates.astype(np.float32)
 
-    def match_and_update(
-        self,
-        cam: CAM,
-        input_bits: np.ndarray,
-        threshold: int = 0,
-    ) -> Tuple[Optional[int], int, int]:
-        nid, row_idx, dist = self.base_match.match(cam, input_bits, threshold=threshold)
-        if nid is None or row_idx < 0:
-            return None, row_idx, dist
+    def update(self, cam: CAM, input_bits: np.ndarray, match: MatchResult, step_index: int) -> UpdateResult:
+        if not match.accepted or match.best_row < 0:
+            return UpdateResult(updated=False, reason="not_accepted")
+        if match.acceptance_margin > self.margin_band:
+            return UpdateResult(updated=False, reason="outside_margin_band")
 
-        margin = threshold - dist
-        if margin > 1:
-            return nid, row_idx, dist
+        ema = cam.state["ema_templates"]
+        row = match.best_row
+        before = cam.templates[row].copy()
 
-        ema = self._ensure_state(cam)
-        x = np.asarray(input_bits, dtype=float)
+        ema[row] = (1.0 - self.alpha) * ema[row] + self.alpha * input_bits.astype(np.float32)
+        cam.templates[row] = (ema[row] >= 0.5).astype(np.uint8)
 
-        ema[row_idx] = (1.0 - self.alpha) * ema[row_idx] + self.alpha * x
-        cam.templates[row_idx] = (ema[row_idx] >= 0.5).astype(int)
-        cam.state["ema_templates"] = ema
-
-        return nid, row_idx, dist
+        changed = _count_bit_changes(before, cam.templates[row])
+        return UpdateResult(
+            updated=changed > 0,
+            updated_row=row,
+            updated_bits=changed,
+            reason="margin_ema",
+        )
 
 
 @dataclass
 class ConfidenceWeightedUpdate(UpdateStrategy):
-    """
-    Weighted Hamming + 位置信度更新策略（参考 ConfidenceWeightedCAM）。
+    """Update both template bits and per-bit match weights.
 
-    注意：这里仍然用基础匹配的汉明距离做“是否 accept”判断，
-    但内部的 bit_conf 只影响更新门控，不直接改距离度量（与原 notebook 行为一致）。
+    Matched bits gain confidence. Mismatched bits lose confidence and can flip
+    once their confidence falls below ``flip_threshold``.
+
+    中文：
+    这个策略除了更新模板，还会更新每个位的可信度，
+    因此既影响 update，也能影响 weighted matching。
     """
 
-    base_match: MatchStrategy
-    lr: float = 0.1
+    lr: float = 0.15
     max_conf: float = 5.0
-
-    def _ensure_state(self, cam: CAM) -> np.ndarray:
-        if "bit_conf" not in cam.state:
-            cam.state["bit_conf"] = np.ones((cam.capacity, cam.bit_width), dtype=float)
-        return cam.state["bit_conf"]
+    min_weight: float = 0.25
+    flip_threshold: float = 0.9
 
     def initialize_state(self, cam: CAM) -> None:
-        cam.state["bit_conf"] = np.ones((cam.capacity, cam.bit_width), dtype=float)
+        cam.state["bit_confidence"] = np.ones((cam.capacity, cam.bit_width), dtype=np.float32)
+        cam.match_weights[:] = 1.0
 
-    def match_and_update(
-        self,
-        cam: CAM,
-        input_bits: np.ndarray,
-        threshold: int = 0,
-    ) -> Tuple[Optional[int], int, int]:
-        nid, row_idx, dist = self.base_match.match(cam, input_bits, threshold=threshold)
-        if nid is None or row_idx < 0:
-            return None, row_idx, dist
+    def update(self, cam: CAM, input_bits: np.ndarray, match: MatchResult, step_index: int) -> UpdateResult:
+        if not match.accepted or match.best_row < 0:
+            return UpdateResult(updated=False, reason="not_accepted")
 
-        margin = threshold - dist
-        if margin > 1:
-            return nid, row_idx, dist
+        confidence = cam.state["bit_confidence"]
+        row = match.best_row
+        before = cam.templates[row].copy()
 
-        bit_conf = self._ensure_state(cam)
-        x = np.asarray(input_bits, dtype=int)
+        same = input_bits == cam.templates[row]
+        confidence[row][same] += self.lr
+        confidence[row][~same] -= self.lr
+        confidence[row] = np.clip(confidence[row], self.min_weight, self.max_conf)
+        cam.match_weights[row] = confidence[row]
 
-        diff = x != cam.templates[row_idx]
-        bit_conf[row_idx][diff] -= self.lr
-        bit_conf[row_idx][~diff] += self.lr
-        bit_conf[row_idx] = np.clip(bit_conf[row_idx], 0.1, self.max_conf)
-
-        flip_mask = diff & (bit_conf[row_idx] < 1.0)
+        flip_mask = (~same) & (confidence[row] <= self.flip_threshold)
         if np.any(flip_mask):
-            cam.templates[row_idx][flip_mask] = x[flip_mask]
+            cam.templates[row][flip_mask] = input_bits[flip_mask]
+            # After a committed flip, restore medium confidence at that bit.
+            confidence[row][flip_mask] = 1.0
+            cam.match_weights[row][flip_mask] = 1.0
 
-        cam.state["bit_conf"] = bit_conf
-        return nid, row_idx, dist
+        changed = _count_bit_changes(before, cam.templates[row])
+        return UpdateResult(
+            updated=changed > 0,
+            updated_row=row,
+            updated_bits=changed,
+            reason="confidence_weighted",
+        )
 
 
 @dataclass
 class DualTemplateUpdate(UpdateStrategy):
-    """
-    双模板策略（稳定 + 可塑），参考 DualTemplateCAM。
+    """Stable/plastic dual-template update.
 
-    - 维护一个浮点 `plastic` 模板（EMA）
-    - 距离可基于 stable/plastic 两者中的较小者（这里只在更新门控中使用距离）
-    - 当 plastic 与 stable 足够接近时，把 stable 合并为 plastic 的方向
+    ``cam.templates`` holds the stable binary template used for matching.
+    A floating plastic template tracks recent observations using EMA.
+    Stable bits commit only when the plastic estimate becomes confident.
+
+    中文：
+    这个策略把模板分成：
+
+    - stable template：真正用于匹配的模板
+    - plastic template：更容易适应最近数据的可塑模板
     """
 
-    base_match: MatchStrategy
     alpha: float = 0.1
-
-    def _ensure_state(self, cam: CAM) -> np.ndarray:
-        if "plastic" not in cam.state:
-            cam.state["plastic"] = cam.templates.astype(float)
-        return cam.state["plastic"]
+    commit_threshold: float = 0.2
 
     def initialize_state(self, cam: CAM) -> None:
-        cam.state["plastic"] = cam.templates.astype(float)
+        cam.state["plastic_templates"] = cam.templates.astype(np.float32)
 
-    def match_and_update(
-        self,
-        cam: CAM,
-        input_bits: np.ndarray,
-        threshold: int = 0,
-    ) -> Tuple[Optional[int], int, int]:
-        nid, row_idx, dist = self.base_match.match(cam, input_bits, threshold=threshold)
-        if nid is None or row_idx < 0:
-            return None, row_idx, dist
+    def update(self, cam: CAM, input_bits: np.ndarray, match: MatchResult, step_index: int) -> UpdateResult:
+        if not match.accepted or match.best_row < 0:
+            return UpdateResult(updated=False, reason="not_accepted")
 
-        plastic = self._ensure_state(cam)
-        x = np.asarray(input_bits, dtype=int)
+        plastic = cam.state["plastic_templates"]
+        row = match.best_row
+        before = cam.templates[row].copy()
 
-        plastic[row_idx] = (1.0 - self.alpha) * plastic[row_idx] + self.alpha * x
+        plastic[row] = (1.0 - self.alpha) * plastic[row] + self.alpha * input_bits.astype(np.float32)
+        target_bits = (plastic[row] >= 0.5).astype(np.uint8)
+        confidence = np.abs(plastic[row] - 0.5)
+        commit_mask = (target_bits != cam.templates[row]) & (confidence >= self.commit_threshold)
+        if np.any(commit_mask):
+            cam.templates[row][commit_mask] = target_bits[commit_mask]
 
-        agree = np.abs(plastic[row_idx] - cam.templates[row_idx]) < 0.1
-        if np.any(agree):
-            cam.templates[row_idx][agree] = (plastic[row_idx][agree] >= 0.5).astype(int)
-
-        cam.state["plastic"] = plastic
-        return nid, row_idx, dist
+        changed = _count_bit_changes(before, cam.templates[row])
+        return UpdateResult(
+            updated=changed > 0,
+            updated_row=row,
+            updated_bits=changed,
+            reason="dual_template",
+        )
 
 
 @dataclass
 class ProbabilisticUpdate(UpdateStrategy):
-    """
-    概率模板策略（参考 ProbabilisticCAM）。
+    """Probabilistic template update with optional confidence reuse for matching.
 
-    - 每个 bit 维护一个概率 p，代表为 1 的概率
-    - 匹配时原论文用 NLL 距离，这里为了简单仍使用基础汉明距离做 accept，
-      但更新逻辑严格按照 EMA 的概率更新 + 0.5 阈值二值化。
+    中文：每个位不只保存 0/1，还保存一个“为 1 的概率”。
     """
 
-    base_match: MatchStrategy
     alpha: float = 0.05
-    eps: float = 1e-4
-
-    def _ensure_state(self, cam: CAM) -> np.ndarray:
-        if "prob" not in cam.state:
-            cam.state["prob"] = cam.templates.astype(float)
-        return cam.state["prob"]
 
     def initialize_state(self, cam: CAM) -> None:
-        cam.state["prob"] = cam.templates.astype(float)
+        cam.state["bit_probability"] = cam.templates.astype(np.float32)
 
-    def match_and_update(
-        self,
-        cam: CAM,
-        input_bits: np.ndarray,
-        threshold: int = 0,
-    ) -> Tuple[Optional[int], int, int]:
-        nid, row_idx, dist = self.base_match.match(cam, input_bits, threshold=threshold)
-        if nid is None or row_idx < 0:
-            return None, row_idx, dist
+    def update(self, cam: CAM, input_bits: np.ndarray, match: MatchResult, step_index: int) -> UpdateResult:
+        if not match.accepted or match.best_row < 0:
+            return UpdateResult(updated=False, reason="not_accepted")
 
-        prob = self._ensure_state(cam)
-        x = np.asarray(input_bits, dtype=float)
+        probability = cam.state["bit_probability"]
+        row = match.best_row
+        before = cam.templates[row].copy()
 
-        prob[row_idx] = (1.0 - self.alpha) * prob[row_idx] + self.alpha * x
-        cam.templates[row_idx] = (prob[row_idx] >= 0.5).astype(int)
-        cam.state["prob"] = prob
+        probability[row] = (1.0 - self.alpha) * probability[row] + self.alpha * input_bits.astype(np.float32)
+        cam.templates[row] = (probability[row] >= 0.5).astype(np.uint8)
+        cam.match_weights[row] = np.clip(np.abs(probability[row] - 0.5) * 2.0, 0.25, 2.0)
 
-        return nid, row_idx, dist
+        changed = _count_bit_changes(before, cam.templates[row])
+        return UpdateResult(
+            updated=changed > 0,
+            updated_row=row,
+            updated_bits=changed,
+            reason="probabilistic",
+        )
 
 
 @dataclass
 class GrowingUpdate(UpdateStrategy):
+    """Add new rows when one template appears insufficient.
+
+    The new row inherits the nearest unit id and stores the current sample as
+    an additional prototype. This lets one neuron occupy multiple templates.
+
+    中文：
+    当一个 unit 的单个模板不够表达其变化时，可以给它再长出一行模板。
     """
-    GrowingCAM 策略（简单版本）：
 
-    - 每行维护一个 usage 计数
-    - 当匹配距离 > threshold 且仍有空行时，分裂出一个新行，将输入 bits 作为新模板
-    """
-
-    base_match: MatchStrategy
-    split_threshold: int = 3
-
-    def _ensure_state(self, cam: CAM) -> np.ndarray:
-        if "usage" not in cam.state:
-            cam.state["usage"] = np.zeros(cam.capacity, dtype=int)
-        return cam.state["usage"]
+    split_threshold: float = 6.0
+    allow_evict: bool = False
 
     def initialize_state(self, cam: CAM) -> None:
-        cam.state["usage"] = np.zeros(cam.capacity, dtype=int)
+        return None
 
-    def match_and_update(
-        self,
-        cam: CAM,
-        input_bits: np.ndarray,
-        threshold: int = 0,
-    ) -> Tuple[Optional[int], int, int]:
-        nid, row_idx, dist = self.base_match.match(cam, input_bits, threshold=threshold)
-        if row_idx < 0:
-            return nid, row_idx, dist
+    def update(self, cam: CAM, input_bits: np.ndarray, match: MatchResult, step_index: int) -> UpdateResult:
+        if match.best_row < 0 or match.best_id is None:
+            return UpdateResult(updated=False, reason="no_candidate_row")
+        if match.best_distance < self.split_threshold:
+            return UpdateResult(updated=False, reason="distance_below_split_threshold")
 
-        usage = self._ensure_state(cam)
-        usage[row_idx] += 1
+        allocated_row = -1
+        evicted_row = -1
+        if cam.free_rows > 0:
+            allocated_row = cam.allocate_row(
+                neuron_id=int(match.best_id),
+                bits=input_bits,
+                mask=cam.masks[match.best_row],
+                weights=cam.match_weights[match.best_row],
+                step_index=step_index,
+            )
+        elif self.allow_evict:
+            evicted_row = cam.select_evict_row()
+            cam.replace_row(
+                row_idx=evicted_row,
+                neuron_id=int(match.best_id),
+                bits=input_bits,
+                mask=cam.masks[match.best_row],
+                weights=cam.match_weights[match.best_row],
+                step_index=step_index,
+            )
+            allocated_row = evicted_row
+        else:
+            return UpdateResult(updated=False, reason="cam_full")
 
-        if dist > threshold and cam.free_rows > 0:
-            new_idx = cam.allocate_row(neuron_id=nid if nid is not None else -1)
-            cam.templates[new_idx] = np.asarray(input_bits, dtype=int)
-            cam.masks[new_idx] = 1
+        return UpdateResult(
+            updated=True,
+            updated_row=allocated_row,
+            allocated_row=allocated_row,
+            evicted_row=evicted_row,
+            updated_bits=int(np.sum(cam.masks[allocated_row])),
+            reason="growing",
+        )
 
-        cam.state["usage"] = usage
-        return nid, row_idx, dist
+
+@dataclass
+class CooldownUpdate(UpdateStrategy):
+    """Simple EMA update gated by a per-row cooldown period.
+
+    中文：避免同一行在很短时间内被连续更新得太激进。
+    """
+
+    alpha: float = 0.05
+    cooldown_steps: int = 50
+
+    def initialize_state(self, cam: CAM) -> None:
+        cam.state["cooldown_ema"] = cam.templates.astype(np.float32)
+
+    def update(self, cam: CAM, input_bits: np.ndarray, match: MatchResult, step_index: int) -> UpdateResult:
+        if not match.accepted or match.best_row < 0:
+            return UpdateResult(updated=False, reason="not_accepted")
+
+        row = match.best_row
+        last_step = int(cam.row_last_update_step[row])
+        if last_step >= 0 and step_index - last_step < self.cooldown_steps:
+            return UpdateResult(updated=False, reason="cooldown")
+
+        ema = cam.state["cooldown_ema"]
+        before = cam.templates[row].copy()
+        ema[row] = (1.0 - self.alpha) * ema[row] + self.alpha * input_bits.astype(np.float32)
+        cam.templates[row] = (ema[row] >= 0.5).astype(np.uint8)
+
+        changed = _count_bit_changes(before, cam.templates[row])
+        return UpdateResult(
+            updated=changed > 0,
+            updated_row=row,
+            updated_bits=changed,
+            reason="cooldown_ema",
+        )
+
+
+@dataclass
+class Top2MarginUpdate(UpdateStrategy):
+    """EMA update allowed only when the match is clearly better than runner-up.
+
+    中文：只有当第一名明显优于第二名时，才允许做更新。
+    """
+
+    alpha: float = 0.05
+    min_margin: float = 2.0
+
+    def initialize_state(self, cam: CAM) -> None:
+        cam.state["top2_ema"] = cam.templates.astype(np.float32)
+
+    def update(self, cam: CAM, input_bits: np.ndarray, match: MatchResult, step_index: int) -> UpdateResult:
+        if not match.accepted or match.best_row < 0:
+            return UpdateResult(updated=False, reason="not_accepted")
+        if match.top2_margin < self.min_margin:
+            return UpdateResult(updated=False, reason="top2_margin_too_small")
+
+        ema = cam.state["top2_ema"]
+        row = match.best_row
+        before = cam.templates[row].copy()
+        ema[row] = (1.0 - self.alpha) * ema[row] + self.alpha * input_bits.astype(np.float32)
+        cam.templates[row] = (ema[row] >= 0.5).astype(np.uint8)
+
+        changed = _count_bit_changes(before, cam.templates[row])
+        return UpdateResult(
+            updated=changed > 0,
+            updated_row=row,
+            updated_bits=changed,
+            reason="top2_margin_ema",
+        )
 
 
 __all__ = [
-    "NoUpdate",
-    "CounterUpdate",
-    "MarginEmaUpdate",
     "ConfidenceWeightedUpdate",
+    "CooldownUpdate",
+    "CounterUpdate",
     "DualTemplateUpdate",
-    "ProbabilisticUpdate",
     "GrowingUpdate",
+    "MarginEmaUpdate",
+    "NoUpdate",
+    "ProbabilisticUpdate",
+    "Top2MarginUpdate",
 ]
-

@@ -1,0 +1,39 @@
+{
+  "_comment": "2026-03-14 full study manifest. This file is used by the master report builder.",
+  "study_name": "2026-03-14_full_study",
+  "study_title": "Spike CAM Full Memory-Aware Study",
+  "results_root": "results/2026-03-14_full_study",
+  "description": "Comprehensive thesis-style study under the memory-aware protocol: stream subset and CAM memory subset are decoupled.",
+  "experiments": [
+    {
+      "name": "memory_sweep_external_ae16",
+      "title": "Memory Capacity Sweep",
+      "question": "When the test stream contains top50 units, how many units should CAM remember: top10, top20, top30, top40, or all top50?"
+    },
+    {
+      "name": "update_compare_external_ae16",
+      "title": "Dynamic Update Comparison",
+      "question": "Under fixed stream=top50 and memory=top20, which dynamic CAM update strategy gives the best trade-off among accuracy, reject behavior, false accepts, and wrong updates?"
+    },
+    {
+      "name": "bits_ablation_memoryaware",
+      "title": "Bit-Budget Ablation",
+      "question": "Under the same memory-aware protocol, how do 8 / 16 / 32 bits affect separability, reject behavior, and final CAM accuracy?"
+    },
+    {
+      "name": "threshold_sweep_external_ae16",
+      "title": "Reject Threshold Sweep",
+      "question": "How does the Hamming threshold control the trade-off between false reject and false accept when memory is limited?"
+    },
+    {
+      "name": "init_ablation_external_ae16",
+      "title": "Template Initialization Ablation",
+      "question": "How sensitive is the system to the initial template construction method under the memory-aware setting?"
+    },
+    {
+      "name": "encoder_compare_memoryaware",
+      "title": "Encoder Frontend Comparison",
+      "question": "How much does the front-end encoder quality influence the downstream memory-aware CAM task?"
+    }
+  ]
+}

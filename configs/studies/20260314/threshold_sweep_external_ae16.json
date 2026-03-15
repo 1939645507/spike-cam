@@ -1,0 +1,100 @@
+{
+  "_comment": "Study 4: sweep Hamming reject threshold under stream top50 / memory top20, static CAM.",
+  "experiment_name": "threshold_sweep_external_ae16",
+  "description": "Reject-threshold trade-off under the memory-aware protocol.",
+  "seed": 42,
+  "dataset": {
+    "npz_path": "dataset/my_validation_subset_810000samples_27.00s.npz",
+    "waveform": {
+      "waveform_length": 79,
+      "center_index": 39,
+      "align_mode": "min",
+      "channel_selection": "max_abs",
+      "fixed_channel": 0
+    },
+    "subset": {
+      "mode": "topk",
+      "topk": 50
+    },
+    "sampling": {
+      "max_total_spikes": null,
+      "max_spikes_per_unit": 250,
+      "selection_mode": "uniform_time"
+    },
+    "sort_by_time": true
+  },
+  "encoder": {
+    "method": "ae",
+    "backend": "external",
+    "code_size": 16,
+    "cache_dir": "results/cache/encoded_cache",
+    "reuse_cache": true,
+    "force_reencode": false,
+    "fit_scope": "all",
+    "ae_type": "normal",
+    "epochs": 3,
+    "layers": [64, 32],
+    "scale": "minmax",
+    "learning_rate": 0.001,
+    "batch_size": 128,
+    "binarize_threshold": 0.0,
+    "verbose": 0
+  },
+  "template_init": {
+    "method": "majority_vote",
+    "stable_mask_threshold": 0.85,
+    "multi_template_per_unit": 2
+  },
+  "matcher": {
+    "method": "hamming_nearest",
+    "threshold": 4.0,
+    "min_margin": 2.0,
+    "min_accept_margin": 1.0
+  },
+  "update": {
+    "method": "none",
+    "max_confidence": 12,
+    "alpha": 0.05,
+    "lr": 0.15,
+    "max_conf": 5.0,
+    "min_weight": 0.25,
+    "flip_threshold": 0.9,
+    "split_threshold": 6.0,
+    "margin_band": 1.0,
+    "cooldown_steps": 50,
+    "min_margin": 2.0,
+    "allow_evict": false
+  },
+  "cam": {
+    "capacity": null,
+    "capacity_factor": 1.5,
+    "extra_rows": 6,
+    "eviction_policy": "least_used",
+    "memory_subset": {
+      "mode": "topk",
+      "topk": 20,
+      "selection_source": "pre_sampling"
+    }
+  },
+  "evaluation": {
+    "mode": "chronological",
+    "warmup_ratio": 0.25,
+    "random_train_frac": 0.7,
+    "window_size": 250,
+    "store_curves": true
+  },
+  "results": {
+    "results_dir": "results/2026-03-14_full_study",
+    "save_predictions": true,
+    "save_curves": true,
+    "save_confusion": true,
+    "copy_encoded_dataset": false
+  },
+  "variants": [
+    { "name": "thr2", "matcher": { "threshold": 2.0 } },
+    { "name": "thr3", "matcher": { "threshold": 3.0 } },
+    { "name": "thr4", "matcher": { "threshold": 4.0 } },
+    { "name": "thr5", "matcher": { "threshold": 5.0 } },
+    { "name": "thr6", "matcher": { "threshold": 6.0 } }
+  ]
+}

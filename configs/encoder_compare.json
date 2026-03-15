@@ -1,0 +1,131 @@
+{
+  "_comment": "encoder 消融实验。保持 CAM 设置不变，只比较 PCA vs AE；stream 与 memory 已解耦。",
+  "experiment_name": "encoder_compare",
+  "description": "Encoder ablation comparing PCA and AE under the same static CAM setup.",
+  "seed": 42,
+  "dataset": {
+    "_comment": "这里用 top50 作为 stream，encoder 看到更丰富的类分布。",
+    "npz_path": "dataset/my_validation_subset_810000samples_27.00s.npz",
+    "preprocess": {
+      "_comment": "encoder 消融也沿用统一前处理，避免 encoder 比较被 raw preprocessing 污染。",
+      "bandpass_enable": true,
+      "bandpass_low_hz": 300.0,
+      "bandpass_high_hz": 6000.0,
+      "bandpass_order": 3,
+      "common_reference_enable": true,
+      "common_reference_mode": "median",
+      "whitening_enable": false,
+      "whitening_num_samples": 20000,
+      "whitening_chunk_size": 50000,
+      "whitening_eps": 1e-5
+    },
+    "waveform": {
+      "waveform_length": 79,
+      "center_index": 39,
+      "align_mode": "min",
+      "alignment_reference": "global_activity",
+      "channel_selection": "topk_max_abs",
+      "topk_channels": 8,
+      "selection_radius": 8,
+      "channel_order": "by_strength",
+      "flatten_order": "channel_major",
+      "fixed_channel": 0
+    },
+    "subset": {
+      "_comment": "测试流包含 top50 活跃类。",
+      "mode": "topk",
+      "topk": 50
+    },
+    "sampling": {
+      "max_total_spikes": null,
+      "max_spikes_per_unit": 300,
+      "selection_mode": "uniform_time"
+    },
+    "sort_by_time": true
+  },
+  "encoder": {
+    "_comment": "base 是 AE；PCA variant 会覆盖 method。",
+    "method": "ae",
+    "backend": "auto",
+    "code_size": 16,
+    "cache_dir": "results/cache/encoded_cache",
+    "reuse_cache": true,
+    "force_reencode": false,
+    "fit_scope": "all",
+    "ae_type": "normal",
+    "epochs": 6,
+    "layers": [64, 32],
+    "scale": "robust",
+    "learning_rate": 0.01,
+    "batch_size": 128,
+    "binarize_threshold": 0.0,
+    "verbose": 1
+  },
+  "template_init": {
+    "method": "majority_vote",
+    "stable_mask_threshold": 0.85,
+    "multi_template_per_unit": 2
+  },
+  "matcher": {
+    "method": "hamming_nearest",
+    "threshold": 4.0,
+    "min_margin": 2.0,
+    "min_accept_margin": 1.0
+  },
+  "update": {
+    "method": "none",
+    "max_confidence": 12,
+    "alpha": 0.05,
+    "lr": 0.15,
+    "max_conf": 5.0,
+    "min_weight": 0.25,
+    "flip_threshold": 0.9,
+    "split_threshold": 6.0,
+    "margin_band": 1.0,
+    "cooldown_steps": 50,
+    "min_margin": 2.0,
+    "allow_evict": false
+  },
+  "cam": {
+    "capacity": null,
+    "capacity_factor": 1.0,
+    "extra_rows": 0,
+    "eviction_policy": "least_used",
+    "memory_subset": {
+      "_comment": "CAM 只记住 top20 活跃类。",
+      "mode": "topk",
+      "topk": 20,
+      "selection_source": "pre_sampling"
+    }
+  },
+  "evaluation": {
+    "mode": "chronological",
+    "warmup_ratio": 0.25,
+    "random_train_frac": 0.7,
+    "window_size": 250,
+    "store_curves": true
+  },
+  "results": {
+    "results_dir": "results",
+    "save_predictions": true,
+    "save_curves": true,
+    "save_confusion": true,
+    "copy_encoded_dataset": false
+  },
+  "variants": [
+    {
+      "_comment": "AE 前端 + static CAM。",
+      "name": "ae_static",
+      "description": "Lightweight / external autoencoder frontend with static CAM."
+    },
+    {
+      "_comment": "PCA 前端 + static CAM，用来作为 encoder baseline。",
+      "name": "pca_static",
+      "description": "PCA baseline with the same 16-bit budget and static CAM.",
+      "encoder": {
+        "method": "pca",
+        "backend": "auto"
+      }
+    }
+  ]
+}

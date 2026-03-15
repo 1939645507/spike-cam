@@ -1,0 +1,32 @@
+{
+  "name": "toy_drift_u12_c16_75s",
+  "duration_sec": 75,
+  "num_units": 12,
+  "num_channels": 16,
+  "sampling_frequency": 30000.0,
+  "firing_rate": 5.0,
+  "average_peak_amplitude": -115.0,
+  "extra_noise_std": 4.0,
+  "drift_strength": 0.28,
+  "drift_phase": 0.8,
+  "description": "Closed-set drift scenario: same scale as dense toy, but with extra noise and smooth channel-wise drift over time.",
+  "seed": 33,
+  "npz_path": "/Users/ceker/Library/CloudStorage/OneDrive-TheUniversityofHongKong-Connect/文档/hku/elec4848/code/spike_cam/dataset/toy/toy_drift_u12_c16_75s.npz",
+  "num_spikes": 4534,
+  "label_counts": {
+    "0": 391,
+    "1": 386,
+    "2": 384,
+    "3": 360,
+    "4": 350,
+    "5": 375,
+    "6": 357,
+    "7": 369,
+    "8": 390,
+    "9": 406,
+    "10": 370,
+    "11": 396
+  },
+  "mean_count_per_unit": 377.8333333333333,
+  "std_count_per_unit": 16.390207103294603
+}
