@@ -1,6 +1,8 @@
 # Spike CAM 详细说明
 
-返回简版首页： [../README_zh.md](../README_zh.md)  
+返回 GitHub 中文首页： [../README.md](../README.md)  
+中文 quick-start 镜像： [../README_zh.md](../README_zh.md)  
+英文 quick-start： [../README_en.md](../README_en.md)  
 英文详细版： [PROJECT_GUIDE.md](PROJECT_GUIDE.md)  
 补充文档： [../CODE_READING_ORDER_zh.md](../CODE_READING_ORDER_zh.md)
 

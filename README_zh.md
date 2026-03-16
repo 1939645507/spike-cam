@@ -1,6 +1,7 @@
 # Spike CAM
 
-English quick-start: [README.md](README.md)  
+GitHub 默认中文首页： [README.md](README.md)  
+English quick-start: [README_en.md](README_en.md)  
 详细文档： [docs/PROJECT_GUIDE_zh.md](docs/PROJECT_GUIDE_zh.md) | [docs/PROJECT_GUIDE.md](docs/PROJECT_GUIDE.md)
 
 这是一个面向毕设 / 课程项目的 **Spike CAM 实验平台**。  
@@ -27,6 +28,7 @@ English quick-start: [README.md](README.md)
 spike_cam/
 ├── README.md
 ├── README_zh.md
+├── README_en.md
 ├── docs/
 ├── configs/
 ├── dataset/
@@ -189,6 +191,7 @@ results/experiments/<YYYY-MM-DD>/<experiment_name>/
 
 - 详细中文说明： [docs/PROJECT_GUIDE_zh.md](docs/PROJECT_GUIDE_zh.md)
 - 详细英文说明： [docs/PROJECT_GUIDE.md](docs/PROJECT_GUIDE.md)
+- 英文 quick-start： [README_en.md](README_en.md)
 - 可公开查看的实验报告： [docs/experiment_reports/README.md](docs/experiment_reports/README.md)
 - 代码阅读顺序： [CODE_READING_ORDER_zh.md](CODE_READING_ORDER_zh.md)
 

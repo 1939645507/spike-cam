@@ -1,6 +1,7 @@
 # Spike CAM Detailed Guide
 
-Back to the quick-start homepage: [../README.md](../README.md)  
+Chinese homepage: [../README.md](../README.md)  
+English quick-start: [../README_en.md](../README_en.md)  
 Chinese detailed guide: [PROJECT_GUIDE_zh.md](PROJECT_GUIDE_zh.md)
 
 ## 1. Project Overview

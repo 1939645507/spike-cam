@@ -1,31 +1,33 @@
 # Spike CAM
 
-Chinese quick-start: [README_zh.md](README_zh.md)  
-Detailed guides: [docs/PROJECT_GUIDE.md](docs/PROJECT_GUIDE.md) | [docs/PROJECT_GUIDE_zh.md](docs/PROJECT_GUIDE_zh.md)
+English quick-start: [README_en.md](README_en.md)  
+详细文档： [docs/PROJECT_GUIDE_zh.md](docs/PROJECT_GUIDE_zh.md) | [docs/PROJECT_GUIDE.md](docs/PROJECT_GUIDE.md)
 
-Spike CAM is a reproducible experiment platform for **online spike identification with binary templates stored in CAM (content-addressable memory)**.
+这是一个面向毕设 / 课程项目的 **Spike CAM 实验平台**。  
+它的目标是：在固定编码条件和有限 CAM memory 下，系统比较不同的模板初始化、匹配和动态更新策略。
 
-The main research question is:
+核心研究问题可以概括成一句话：
 
-> Under a fixed encoder and limited CAM memory, how do different template initialization, matching, and dynamic update strategies trade off between accuracy, reject behavior, stability, and memory usage?
+> 在固定 encoder 的前提下，不同 CAM 动态更新策略能否更稳定地识别 memory 内类，并拒绝 memory 外类？
 
-## What this repo does
+## 这个项目能做什么
 
-- loads raw spike datasets from `.npz`
-- preprocesses continuous voltage with `bandpass / CMR / optional whitening`
-- extracts multi-channel spike waveforms
-- encodes waveforms into binary codes with `PCA` or `AE`
-- builds CAM templates
-- runs **chronological / online** evaluation
-- compares dynamic update strategies
-- saves metrics, predictions, curves, and reports under `results/`
+- 从 `.npz` 读取原始 spike 数据
+- 对连续电压做 `bandpass / CMR / optional whitening`
+- 提取 multi-channel waveform
+- 用 `PCA` 或 `AE` 编码成 bits
+- 建立 CAM 模板
+- 做 **chronological / online** 评估
+- 比较不同动态更新算法
+- 自动保存指标、曲线、图表和报告
 
-## Repository layout
+## 项目结构
 
 ```text
 spike_cam/
 ├── README.md
 ├── README_zh.md
+├── README_en.md
 ├── docs/
 ├── configs/
 ├── dataset/
@@ -44,62 +46,62 @@ spike_cam/
 └── run_experiment.py
 ```
 
-## Quick start
+## 快速开始
 
-### 1. Environment
+### 1. 环境
 
-Recommended environment:
+推荐环境：
 
 ```bash
 conda activate spikecam_py310
 pip install -r requirements.txt
 ```
 
-If you want to use the external `Autoencoders-in-Spike-Sorting` backend, make sure `tensorflow` and `scikit-learn` are available in `spikecam_py310`.
+如果你要用 `external/Autoencoders-in-Spike-Sorting`，请确认 `spikecam_py310` 里有 `tensorflow` 和 `scikit-learn`。
 
-### 2. Run a baseline experiment
+### 2. 跑一个 baseline
 
 ```bash
 MPLCONFIGDIR=.mplconfig conda run -n spikecam_py310 \
   python run_experiment.py --config configs/baseline_top10_ae16.json
 ```
 
-This runs one complete pipeline:
+这条命令会完成整条流程：
 
-- load dataset
-- preprocess and extract waveforms
-- encode waveforms into bits
-- build templates from warmup data
-- run chronological CAM evaluation
-- save metrics and plots
+- 读数据
+- 前处理和 waveform 提取
+- 编码成 bits
+- 用 warmup 建模板
+- 跑 chronological CAM 评估
+- 保存结果
 
-### 3. Generate toy datasets
+### 3. 生成 toy 数据
 
 ```bash
 MPLCONFIGDIR=.mplconfig conda run -n spikecam_py310 \
   python scripts/generate_toy_datasets.py
 ```
 
-Toy datasets are written to `dataset/toy/`.
+toy 数据会保存到 `dataset/toy/`。
 
-### 4. Run the toy thesis study
+### 4. 跑 toy 全面实验
 
 ```bash
 MPLCONFIGDIR=.mplconfig conda run -n spikecam_py310 \
   python scripts/run_toy_thesis_study.py
 ```
 
-This produces a packaged study with:
+这组实验会自动生成：
 
-- multiple toy datasets
-- stable / drift / open-memory scenarios
-- update-strategy comparison
-- bit-budget ablation
-- initialization ablation
-- encoder comparison
-- a readable master report
+- 多个 toy dataset
+- stable / drift / open-memory 场景
+- dynamic update 对比
+- bit 数消融
+- 初始化方法消融
+- encoder 对比
+- 一份总报告
 
-### 5. Optional: train a reusable external AE artifact
+### 5. 可选：训练可复用 external AE
 
 ```bash
 MPLCONFIGDIR=.mplconfig conda run -n spikecam_py310 \
@@ -111,15 +113,15 @@ MPLCONFIGDIR=.mplconfig conda run -n spikecam_py310 \
   --scale minmax
 ```
 
-## How to change experiments
+## 怎么改实验
 
-The project is config-driven. In most cases you only edit `configs/*.json`.
+这个项目是 **配置驱动** 的。大多数情况下你只需要改 `configs/*.json`。
 
-Common fields to change:
+最常改的字段：
 
-- `dataset.npz_path`: choose the input dataset
-- `dataset.subset`: choose which labels enter the stream
-- `cam.memory_subset`: choose which labels are stored in CAM
+- `dataset.npz_path`
+- `dataset.subset`
+- `cam.memory_subset`
 - `encoder.method` / `encoder.backend` / `encoder.code_size`
 - `template_init.method`
 - `matcher.method`
@@ -127,73 +129,74 @@ Common fields to change:
 - `cam.match_threshold`
 - `evaluation.warmup_ratio`
 
-Example:
+几个常见例子：
 
-- want a different bit width: change `encoder.code_size`
-- want to compare `static` vs `counter`: change the config variants
-- want `top50 stream / top20 memory`: change `dataset.subset` and `cam.memory_subset`
+- 想改 bit 数：改 `encoder.code_size`
+- 想比较 `static` 和 `counter`：改 config 里的 variants
+- 想做 `top50 stream / top20 memory`：改 `dataset.subset` 和 `cam.memory_subset`
 
-## Main commands
+## 常用命令
 
-Inspect label distribution:
+查看 label 分布：
 
 ```bash
 python scripts/inspect_labels.py --npz dataset/my_validation_subset_810000samples_27.00s.npz
 ```
 
-Prepare encoded dataset only:
+只做编码：
 
 ```bash
 python run_experiment.py --config configs/baseline_top10_ae16.json --encode-only
 ```
 
-Inspect encoded separability:
+检查 encoded dataset：
 
 ```bash
 python scripts/inspect_encoded_dataset.py --encoded results/cache/encoded_cache/<file>.npz
 ```
 
-Run only selected variants:
+只跑部分 variants：
 
 ```bash
 python run_experiment.py --config configs/cam_compare_main.json --variant static --variant counter
 ```
 
-## Output layout
+## 输出目录
 
-Regular runs are saved under:
+普通实验默认保存到：
 
 ```text
 results/experiments/<YYYY-MM-DD>/<experiment_name>/
 ```
 
-Typical files:
+常见输出包括：
 
-- `config.json`: resolved config used for the run
-- `summary.json`: summary across variants
-- `runs/<variant>/metrics.json`: core metrics
-- `runs/<variant>/predictions.npz`: predictions
-- `runs/<variant>/curves.npz`: online curves
-- `report.md`: human-readable summary for study-style scripts
+- `config.json`
+- `summary.json`
+- `runs/<variant>/metrics.json`
+- `runs/<variant>/predictions.npz`
+- `runs/<variant>/curves.npz`
+- `report.md`
 
-## Suggested entry points
+## 推荐入口
 
-- `configs/baseline_top10_ae16.json`: sanity check
-- `configs/cam_compare_main.json`: main CAM comparison
-- `configs/bits_ablation.json`: bit-budget ablation
-- `configs/encoder_compare.json`: encoder comparison
-- `configs/init_ablation.json`: initialization ablation
+- `configs/baseline_top10_ae16.json`：baseline / sanity check
+- `configs/cam_compare_main.json`：主实验
+- `configs/bits_ablation.json`：bit 数消融
+- `configs/encoder_compare.json`：encoder 消融
+- `configs/init_ablation.json`：初始化消融
 
-## Documentation
+## 详细文档
 
-- Quick Chinese guide: [README_zh.md](README_zh.md)
-- Detailed English guide: [docs/PROJECT_GUIDE.md](docs/PROJECT_GUIDE.md)
-- Detailed Chinese guide: [docs/PROJECT_GUIDE_zh.md](docs/PROJECT_GUIDE_zh.md)
-- Public experiment reports: [docs/experiment_reports/README.md](docs/experiment_reports/README.md)
-- Code reading order: [CODE_READING_ORDER_zh.md](CODE_READING_ORDER_zh.md)
+- 中文 quick-start 镜像： [README_zh.md](README_zh.md)
+- 英文 quick-start： [README_en.md](README_en.md)
+- 详细中文说明： [docs/PROJECT_GUIDE_zh.md](docs/PROJECT_GUIDE_zh.md)
+- 详细英文说明： [docs/PROJECT_GUIDE.md](docs/PROJECT_GUIDE.md)
+- 可公开查看的实验报告： [docs/experiment_reports/README.md](docs/experiment_reports/README.md)
+- 代码阅读顺序： [CODE_READING_ORDER_zh.md](CODE_READING_ORDER_zh.md)
 
-## Notes for GitHub
+## GitHub 上传建议
 
-- large raw datasets are not tracked
-- generated results, cache, and model artifacts are ignored
-- toy datasets can be regenerated locally with `scripts/generate_toy_datasets.py`
+- 大型原始数据不要提交
+- `results/`、cache、artifact 建议忽略
+- toy 数据可以随时用 `scripts/generate_toy_datasets.py` 重新生成
